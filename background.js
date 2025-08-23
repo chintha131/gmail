@@ -1,4 +1,4 @@
-// background.js - The service worker and brain of the extension
+// background.js - Combined and updated service worker
 
 // --- State Management ---
 const initialState = {
@@ -14,9 +14,9 @@ const initialState = {
   reviewingCount: 0,
   clickedCount: 0,
   sentCount: 0,
-  repliesSentCount: 0, // ✨ New counter for AI replies
+  repliesSentCount: 0,
   // Settings
-  isAiReplyEnabled: false, // ✨ AI feature toggle
+  isAiReplyEnabled: false,
   // Seedlist for tracking events
   seedlist: []
 };
@@ -45,20 +45,9 @@ async function addLog(message) {
   }
 }
 
-async function setStep(stepName) {
-  await chrome.storage.local.set({ step: stepName });
-}
-
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-function sleepWithJitter(baseMs) {
-    const jitter = baseMs * 0.4; // Add up to 40% jitter
-    const totalSleep = baseMs + Math.random() * jitter;
-    return sleep(totalSleep);
-}
-
 
 async function sendMessageToTab(tabId, message) {
   let retries = 3;
@@ -81,121 +70,6 @@ async function sendMessageToTab(tabId, message) {
   throw new Error(`Could not connect to content script in tab ${tabId} after multiple retries.`);
 }
 
-// --- Gemini API Integration ---
-
-async function generateReply(emailBody) {
-    if (!emailBody || emailBody.trim().length < 20) {
-        addLog("✨ Email body too short, skipping AI reply.");
-        return null;
-    }
-
-    const prompt = `You are an AI assistant helping to warm up an email account. Your task is to write a short, positive, one-sentence reply to the following email. The reply should show you've read the email but ask no questions. Keep it casual and friendly. Examples: "Thanks for the update, this looks great!", "Awesome, appreciate you sending this over.", "Good to know, thanks for sharing."\n\nEmail Content:\n"""\n${emailBody.substring(0, 2000)}\n"""\n\nReply:`;
-
-    try {
-        addLog("✨ Asking Gemini for a smart reply...");
-        const apiKey = ""; // Canvas will provide this
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-        
-        const payload = {
-            contents: [{ role: "user", parts: [{ text: prompt }] }]
-        };
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
-
-        const result = await response.json();
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (text) {
-            addLog(`✨ Gemini suggested reply: "${text.trim()}"`);
-            return text.trim();
-        } else {
-            addLog("✨ Gemini did not return a valid reply.");
-            return null;
-        }
-    } catch (error) {
-        console.error("Error calling Gemini API:", error);
-        addLog(`❌ Error generating AI reply: ${error.message}`);
-        return null;
-    }
-}
-
-
-// --- Message Handling ---
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case "startWarmup":
-      warmupOrchestrator().catch(console.error);
-      sendResponse({ status: "Warmup initiated" });
-      break;
-    
-    case "openAndCloseTab":
-      (async () => {
-        const newTab = await chrome.tabs.create({ url: request.url, active: false });
-        await sleepWithJitter(8000); // Wait for 8 seconds on the new page
-        await chrome.tabs.remove(newTab.id);
-        sendResponse({ status: "completed" });
-      })();
-      return true; // Keep the message channel open for async response
-
-    case "getReply":
-        generateReply(request.emailBody).then(reply => sendResponse({ reply }));
-        break;
-
-    case "incrementReplyCount":
-        chrome.storage.local.get('repliesSentCount').then(data => {
-            chrome.storage.local.set({ repliesSentCount: (data.repliesSentCount || 0) + 1 });
-        });
-        sendResponse({ok: true});
-        break;
-
-    case "saveAiReplySetting":
-        chrome.storage.local.set({ isAiReplyEnabled: request.isEnabled });
-        sendResponse({ok: true});
-        break;
-    
-    case "startScan":
-      chrome.storage.local.set({ isScanning: true, scanResults: {} });
-      scanAccounts().then(results => sendResponse({ results }));
-      break;
-    case "saveGlobalLimit":
-      chrome.storage.local.set({ mailLimit: Number(request.value) || 10 })
-        .then(() => sendResponse({ ok: true }));
-      break;
-    case "savePerAccountLimit":
-      const { accountIndex, value } = request;
-      chrome.storage.local.get("perAccountLimits").then(({ perAccountLimits = {} }) => {
-        perAccountLimits[String(accountIndex)] = Number(value) || 10;
-        chrome.storage.local.set({ perAccountLimits })
-          .then(() => sendResponse({ ok: true }));
-      });
-      break;
-    case "mailOpened":
-    case "linkClicked":
-    case "mailSent":
-      pushSeed(request).then(() => sendResponse({ ok: true }));
-      break;
-    default:
-      sendResponse({ status: "unknown action" });
-      break;
-  }
-  return true; // Indicate async response
-});
-
-async function pushSeed(event) {
-  const data = await chrome.storage.local.get("seedlist");
-  const item = { time: new Date().toISOString(), ...event };
-  const newSeedlist = [...(data.seedlist || []), item].slice(-200);
-  await chrome.storage.local.set({ seedlist: newSeedlist });
-}
-
 
 // --- Core Functionality: Warmup ---
 let warmupTabs = {}; // Manages state for multiple tabs
@@ -204,12 +78,10 @@ async function warmupOrchestrator() {
     await chrome.storage.local.set({
         isWarmingUp: true,
         step: "Starting",
-        log: [],
-        runningCount: 0, reviewingCount: 0, clickedCount: 0, sentCount: 0, repliesSentCount: 0
     });
 
     const { mailLimit, scanResults } = await chrome.storage.local.get(["mailLimit", "scanResults"]);
-    const accounts = Object.keys(scanResults);
+    const accounts = Object.keys(scanResults || {});
 
     if (accounts.length === 0) {
         await addLog("No accounts scanned. Please scan accounts before starting warmup.");
@@ -219,12 +91,12 @@ async function warmupOrchestrator() {
 
     for (const account of accounts) {
         const accountIndex = account.replace("Account ", "");
-        const startUrl = `https://mail.google.com/mail/u/${accountIndex}/#spam`;
+        const startUrl = `https://mail.google.com/mail/u/${accountIndex}/#inbox`; // Start from inbox
         const tab = await chrome.tabs.create({ url: startUrl, active: false });
 
         warmupTabs[tab.id] = {
             accountIndex,
-            navigationState: "movingSpam",
+            navigationState: "processingInbox", // Start with inbox processing
             processedCycles: 0,
             maxCycles: Number(mailLimit) || 10
         };
@@ -236,17 +108,17 @@ async function warmupOrchestrator() {
 const navigationListener = async ({ tabId, url }) => {
     if (!warmupTabs[tabId]) return;
 
-    const { isWarmingUp, isAiReplyEnabled } = await chrome.storage.local.get(["isWarmingUp", "isAiReplyEnabled"]);
+    const { isWarmingUp } = await chrome.storage.local.get("isWarmingUp");
     if (!isWarmingUp) return;
 
     const tabState = warmupTabs[tabId];
     const accountIndex = tabState.accountIndex;
 
     const transitions = {
+        processingInbox: { urlFragment: "#inbox", action: "processInboxMails", log: `📩 Processing Inbox for Account ${accountIndex}...`, nextState: "movingSpam", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#spam` },
         movingSpam: { urlFragment: "#spam", action: "moveSpamToInbox", log: `📂 Processing Spam for Account ${accountIndex}...`, nextState: "movingPromos", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#category/promotions` },
-        movingPromos: { urlFragment: "#category/promotions", action: "movePromotionsToInbox", log: `🏷️ Processing Promotions for Account ${accountIndex}...`, nextState: "movingUpdates", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#category/updates` },
-        movingUpdates: { urlFragment: "#category/updates", action: "moveUpdatesToInbox", log: `📰 Processing Updates for Account ${accountIndex}...`, nextState: "movingSocial", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#category/social` },
-        movingSocial: { urlFragment: "#category/social", action: "moveSocialToInbox", log: `👥 Processing Social for Account ${accountIndex}...`, nextState: "processingInbox", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#inbox` }
+        movingPromos: { urlFragment: "#category/promotions", action: "movePromotionsToInbox", log: `🏷️ Processing Promotions for Account ${accountIndex}...`, nextState: "movingSocial", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#category/social` },
+        movingSocial: { urlFragment: "#category/social", action: "moveSocialToInbox", log: `👥 Processing Social for Account ${accountIndex}...`, nextState: "cycleComplete", nextUrl: `https://mail.google.com/mail/u/${accountIndex}/#inbox` }
     };
 
     try {
@@ -256,15 +128,13 @@ const navigationListener = async ({ tabId, url }) => {
             await sendMessageToTab(tabId, { action: currentState.action });
             tabState.navigationState = currentState.nextState;
             await chrome.tabs.update(tabId, { url: currentState.nextUrl });
-        } else if (tabState.navigationState === "processingInbox" && url.includes("#inbox")) {
-            await addLog(`📩 Processing Inbox for Account ${accountIndex}...`);
-            await sendMessageToTab(tabId, { action: "processInboxMails", isAiReplyEnabled });
-            tabState.processedCycles++;
 
+        } else if (tabState.navigationState === "cycleComplete") {
+            tabState.processedCycles++;
             if (tabState.processedCycles < tabState.maxCycles) {
                 await addLog(`🔁 Cycle ${tabState.processedCycles}/${tabState.maxCycles} complete for Account ${accountIndex}.`);
-                tabState.navigationState = "movingSpam";
-                await chrome.tabs.update(tabId, { url: `https://mail.google.com/mail/u/${accountIndex}/#spam` });
+                tabState.navigationState = "processingInbox"; // Start next cycle
+                await chrome.tabs.update(tabId, { url: `https://mail.google.com/mail/u/${accountIndex}/#inbox` });
             } else {
                 await addLog(`🏁 Warmup complete for Account ${accountIndex}.`);
                 await chrome.tabs.remove(tabId);
@@ -280,10 +150,6 @@ const navigationListener = async ({ tabId, url }) => {
         await addLog(`❌ Error during warmup for Account ${accountIndex}: ${e.message}`);
         await chrome.tabs.remove(tabId);
         delete warmupTabs[tabId];
-
-        if (Object.keys(warmupTabs).length === 0) {
-            await chrome.storage.local.set({ isWarmingUp: false, step: "Error" });
-        }
     }
 };
 
@@ -294,52 +160,187 @@ if (chrome.webNavigation && chrome.webNavigation.onCompleted) {
       });
     }
 } else {
-    console.error("chrome.webNavigation API is not available. Check permissions in manifest.json.");
-    addLog("❌ Error: webNavigation API not available. Warmup process cannot start.");
+    console.error("chrome.webNavigation API is not available.");
 }
 
 
-// --- Core Functionality: Account Scanning ---
-async function scanAccounts() {
-  await addLog("🔍 Starting account scan...");
-  const results = {};
-  const seenEmails = new Set();
-  const maxAccountsToScan = 5;
+// --- Original background.js Logic ---
 
-  for (let i = 0; i < maxAccountsToScan; i++) {
-    let tabId = null;
-    try {
-      const tab = await chrome.tabs.create({ url: `https://mail.google.com/mail/u/${i}/#inbox`, active: false });
-      tabId = tab.id;
-      await sleepWithJitter(4500); // Increased and randomized delay
+const openedTabs = new Map();
 
-      const acct = await sendMessageToTab(tabId, { action: "getAccountEmail" });
-      if (!acct || !acct.email || seenEmails.has(acct.email)) {
-        await chrome.tabs.remove(tabId);
-        continue;
-      }
-      seenEmails.add(acct.email);
-      await addLog(`Scanning account ${i}: ${acct.email}`);
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (openedTabs.has(tabId)) {
+    openedTabs.delete(tabId);
+  }
+});
 
-      const folders = { inbox: "#inbox", spam: "#spam", promotions: "#category/promotions" };
-      const counts = {};
-      for (const folderName in folders) {
-        await chrome.tabs.update(tabId, { url: `https://mail.google.com/mail/u/${i}/${folders[folderName]}` });
-        await sleepWithJitter(3000); // Increased and randomized delay
-        const countResult = await sendMessageToTab(tabId, { action: "countEmails" });
-        counts[folderName] = countResult?.count ?? 0;
-      }
-
-      const { perAccountLimits = {}, mailLimit = 10 } = await chrome.storage.local.get(["perAccountLimits", "mailLimit"]);
-      results[`Account ${i}`] = { email: acct.email, ...counts, limit: perAccountLimits[String(i)] ?? mailLimit };
-      await chrome.tabs.remove(tabId);
-    } catch (e) {
-      console.warn(`Could not access account ${i}:`, e.message);
-      if (tabId) await chrome.tabs.remove(tabId).catch(() => {});
-    }
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Handle Warmup Action
+  if (request.action === "startWarmup") {
+      warmupOrchestrator().catch(console.error);
+      sendResponse({ status: "Warmup initiated" });
+      return true;
   }
 
-  await addLog(`✅ Scan complete. Found ${Object.keys(results).length} accounts.`);
-  await chrome.storage.local.set({ scanResults: results, isScanning: false });
-  return results;
+  // Handle tab management messages
+  if (request.action === "openTab") {
+    chrome.tabs.create({ url: request.url, active: false }, (tab) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error opening tab:", chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError });
+        return;
+      }
+      openedTabs.set(tab.id, tab);
+      sendResponse({ success: true, tabId: tab.id });
+    });
+    return true; 
+  }
+
+  if (request.action === "closeTab") {
+    if (request.tabId) {
+      chrome.tabs.remove(request.tabId, () => {
+        if (chrome.runtime.lastError) {
+          console.error("Error closing tab:", chrome.runtime.lastError);
+          sendResponse({ success: false, error: chrome.runtime.lastError });
+          return;
+        }
+        openedTabs.delete(request.tabId);
+        sendResponse({ success: true });
+      });
+      return true;
+    }
+    sendResponse({ success: false, error: "No tab ID provided" });
+    return true;
+  }
+
+  // Handle the POST_MESSAGE_ID action
+  if (request.type === "POST_MESSAGE_ID") {
+    const emailData = [{
+      email: request.email,
+      status: "Active",
+      last_active: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    }];
+ 
+    callCombinedAPI(emailData)
+      .then(() => {
+        const apiUrls = [
+          "https://sendcrux.com/api/v1/warmup_activity_log?api_token=xIFZvOVosfhZry58AkS4aTR4TWHiIWrhYnp5tnP4xNPl1Cl30Y90sO0766Rw",
+          "https://revenuerollbulksending.com/api/v1/warmup_activity_log?api_token=mjKi7ZFov2AsJ1egayMsba0zyGbw7dmbnD4sisQELRGDeDPohf950UNm2zvl",
+        ];
+ 
+        const requestData = {
+          message_id: request.messageId,
+          type: request.emailType || "tabs",
+        };
+ 
+        const postRequests = apiUrls.map((apiUrl) =>
+          fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestData),
+          })
+            .then((response) => {
+              if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+              return response.json();
+            })
+            .then((data) => ({ status: "success" }))
+            .catch((error) => ({ status: "error", error: error.message }))
+        );
+ 
+        return Promise.all(postRequests);
+      })
+      .then((results) => {
+        const success = results.every((result) => result.status === "success");
+        sendResponse({ status: success ? "success" : "error" });
+      })
+      .catch((error) => {
+        sendResponse({ status: "error", error: error.message });
+      });
+ 
+    return true;
+  }
+   
+  // Handle saveData action
+  if (request.action === "saveData") {
+    const payload = request.payload;
+    const apiUrls = [
+      "https://revenuerollbulksending.com/api/v1/seedlist/addsubscribers?api_token=mjKi7ZFov2AsJ1egayMsba0zyGbw7dmbnD4sisQELRGDeDPohf950UNm2zvl",
+      "https://sendcrux.com/api/v1/seedlist/addsubscribers?api_token=xIFZvOVosfhZry58AkS4aTR4TWHiIWrhYnp5tnP4xNPl1Cl30Y90sO0766Rw",
+    ];
+ 
+    const postRequests = apiUrls.map((apiUrl) =>
+      fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+          return response.json();
+        })
+        .then((data) => ({ success: true, data: data }))
+        .catch((error) => ({ success: false, error: error.message }))
+    );
+ 
+    Promise.all(postRequests)
+      .then((results) => {
+        const success = results.every((result) => result.success === true);
+        sendResponse({ success: success, data: results });
+      })
+      .catch((error) => {
+        sendResponse({ success: false, error: error.message });
+      });
+ 
+    return true;
+  }
+});
+ 
+async function callCombinedAPI(emailData) {
+  const apiUrl = 'http://127.0.0.1:8000/api/v1/combined';
+  const payload = {
+    gmail_list: { location: "kukatapally" },
+    laptop_detail: { laptop_name: "Laptop-003" },
+    email_detail: emailData
+  };
+ 
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer gmails_stats_2024_secure_token_123'
+      },
+      body: JSON.stringify(payload)
+    });
+ 
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const data = await response.json();
+    console.log('Combined API response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error calling combined API:', error);
+    throw error;
+  }
 }
+ 
+setInterval(() => {
+  fetch("http://localhost:4567/update")
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === true) {
+        console.log("Update pulled successfully, reloading extension...");
+        chrome.runtime.reload();
+      }
+    })
+    .catch(err => {
+      console.error("Failed to check for update:", err);
+    });
+}, 1000 * 60 * 60 * 6);
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'keepAlive') {
+    port.onDisconnect.addListener(() => {
+      chrome.runtime.connect({ name: 'keepAlive' });
+    });
+  }
+});
