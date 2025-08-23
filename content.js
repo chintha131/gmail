@@ -1,20 +1,13 @@
 // content.js - This script runs inside the Gmail page to perform DOM manipulations.
 
 // --- Utility Functions ---
-
-/**
- * Waits for a specific element to appear in the DOM.
- * @param {string} selector The CSS selector for the element.
- * @param {number} timeout The maximum time to wait in milliseconds.
- * @returns {Promise<Element>} A promise that resolves with the element.
- */
 function waitForElement(selector, timeout = 8000) {
   return new Promise((resolve, reject) => {
     const intervalTime = 200;
     let totalWait = 0;
     const interval = setInterval(() => {
       const el = document.querySelector(selector);
-      if (el) {
+      if (el && isVisible(el)) { // Ensure element is also visible
         clearInterval(interval);
         resolve(el);
       } else {
@@ -28,45 +21,38 @@ function waitForElement(selector, timeout = 8000) {
   });
 }
 
-/**
- * A simple promise-based sleep function.
- * @param {number} ms Milliseconds to wait.
- */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Checks if an element is currently visible to the user.
- * @param {Element} el The element to check.
- * @returns {boolean} True if the element is visible.
- */
+function sleepWithJitter(baseMs) {
+    const jitter = baseMs * 0.4;
+    const totalSleep = baseMs + Math.random() * jitter;
+    return sleep(totalSleep);
+}
+
 function isVisible(el) {
   return !!(el && el.offsetParent !== null);
 }
 
-// --- Core Action Functions ---
+function querySelectors(selectors) {
+    for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (element && isVisible(element)) {
+            return element;
+        }
+    }
+    return null;
+}
 
-/**
- * Counts the number of visible email rows in the current view.
- * @returns {number} The count of emails.
- */
+// --- Core Action Functions ---
 function countVisibleMails() {
-  // Gmail's main email list view is a table with role="grid".
   const grid = document.querySelector('div[role="main"] table[role="grid"]');
   if (!grid) return 0;
-  // Each email is a tr with role="row".
   const rows = Array.from(grid.querySelectorAll('tr[role="row"]'));
-  // Filter out header rows or other non-email rows.
   return rows.filter(r => r.querySelector('td')).length;
 }
 
-/**
- * Selects all emails in the current view and moves them to the Inbox.
- * Handles "Not Spam" for the spam folder and "Move to Inbox" for others.
- * @param {string} folderName The name of the folder being processed (for logging).
- * @returns {Promise<object>} A status object.
- */
 async function moveAllToInbox(folderName = "Unknown") {
   try {
     await waitForElement('div[role="main"]');
@@ -76,107 +62,105 @@ async function moveAllToInbox(folderName = "Unknown") {
       return { status: "empty", moved: 0 };
     }
 
-    // Find the master "Select All" checkbox in the toolbar.
-    const selectAllCheckbox = document.querySelector('div[data-tooltip="Select"] span[role="checkbox"]');
+    const selectAllCheckbox = querySelectors([
+        'div[data-tooltip="Select"] span[role="checkbox"]',
+        'div[aria-label="Select"] span[role="checkbox"]',
+        'button[data-tooltip="Select"]'
+    ]);
     if (!selectAllCheckbox) throw new Error("Select-all checkbox not found.");
     selectAllCheckbox.click();
-    await sleep(500);
+    await sleepWithJitter(700);
 
-    // After selecting visible, Gmail might show a banner to "Select all conversations".
     const selectAllBanner = Array.from(document.querySelectorAll('span[role="link"]'))
       .find(el => el.textContent.includes("Select all"));
     if (selectAllBanner) {
       selectAllBanner.click();
-      await sleep(500);
+      await sleepWithJitter(700);
     }
 
-    // Find the correct "Move" button based on the current folder.
     const inSpam = window.location.hash.includes("#spam");
-    const moveButtonSelector = inSpam ?
-      'div[data-tooltip="Not spam"]' :
-      'div[data-tooltip="Move to Inbox"]';
+    
+    const moveButton = inSpam 
+      ? querySelectors(['div[data-tooltip="Not spam"]', 'button[aria-label="Not spam"]', 'button[data-tooltip="Not spam"]'])
+      : querySelectors(['div[data-tooltip="Move to Inbox"]', 'button[aria-label="Move to Inbox"]', 'button[data-tooltip="Move to Inbox"]']);
 
-    const moveButton = document.querySelector(moveButtonSelector);
     if (!moveButton) throw new Error(`"Move" button not found for folder: ${folderName}`);
-
     moveButton.click();
-    await sleep(1500); // Wait for action to complete and UI to update.
+    await sleepWithJitter(2000);
 
     console.log(`✅ Moved emails from ${folderName} to Inbox.`);
     return { status: "success", moved: mailCount, folder: folderName };
-
   } catch (e) {
     console.error(`Error in moveAllToInbox for ${folderName}:`, e.message);
     return { status: "error", message: e.message };
   }
 }
 
-/**
- * Iterates through unread emails in the inbox, opens them, and clicks a "safe" link.
- * @returns {Promise<object>} A status object with the count of processed emails.
- */
-async function openAndClickUnreadMails() {
+async function processInboxMails(isAiReplyEnabled) {
   try {
     let processedCount = 0;
-    const maxToProcess = 50; // Safety break to prevent infinite loops.
+    const maxToProcess = 50;
 
     for (let i = 0; i < maxToProcess; i++) {
       await waitForElement('div[role="main"] table[role="grid"]', 5000).catch(() => {});
-      // Unread emails have a class 'zE'.
-      const nextUnread = document.querySelector('tr.zE');
+      
+      const nextUnread = querySelectors([
+          'tr.zE',
+          'tr.zA.yO[aria-selected="false"]'
+      ]);
+
       if (!nextUnread) {
         console.log("No more unread emails found.");
-        break; // Exit loop if no unread emails are left.
+        break;
       }
 
-      nextUnread.click();
-      await waitForElement('div.a3s', 8000); // Wait for email body to load.
-      await sleep(1000);
+      const clickableArea = nextUnread.querySelector('td');
+      if(clickableArea) clickableArea.click();
+      else nextUnread.click();
 
-      // Find a "safe" link to click. Avoids unsubscribe, spam, etc.
-      const emailBody = document.querySelector('div.a3s');
-      if (emailBody) {
-        const links = Array.from(emailBody.querySelectorAll('a[href]'));
-        const badKeywords = ["unsubscribe", "report", "spam", "abuse", "block", "privacy", "terms"];
-        const safeLink = links.find(a => {
-          const text = (a.textContent || "").toLowerCase();
-          const href = (a.getAttribute("href") || "").toLowerCase();
-          return !badKeywords.some(kw => text.includes(kw) || href.includes(kw));
-        });
+      await waitForElement('div.a3s', 8000);
+      await sleepWithJitter(1200);
 
-        if (safeLink) {
-          console.log("Found safe link, clicking:", safeLink.href);
-          safeLink.setAttribute("target", "_blank"); // Open in new tab to avoid navigation issues.
-          safeLink.click();
-          await sleep(500);
+      if (isAiReplyEnabled) {
+        // AI Reply Logic
+      } else {
+        const emailBody = document.querySelector('div.a3s');
+        if (emailBody) {
+          const links = Array.from(emailBody.querySelectorAll('a[href]'));
+          const badKeywords = ["unsubscribe", "report", "spam", "abuse", "block", "privacy", "terms"];
+          const safeLink = links.find(a => {
+            const text = (a.textContent || "").toLowerCase();
+            const href = (a.getAttribute("href") || "").toLowerCase();
+            return !badKeywords.some(kw => text.includes(kw) || href.includes(kw)) && href.startsWith('http');
+          });
+
+          if (safeLink) {
+            console.log("Found safe link, opening in new tab:", safeLink.href);
+            await chrome.runtime.sendMessage({ action: "openAndCloseTab", url: safeLink.href });
+            await sleepWithJitter(1000);
+          }
         }
       }
 
-      // Go back to the inbox view.
-      const backButton = document.querySelector('div[data-tooltip="Back to Inbox"]');
-      if (backButton && isVisible(backButton)) {
+      const backButton = querySelectors(['div[data-tooltip="Back to Inbox"]', 'div[aria-label="Back to Inbox"]', 'button[data-tooltip="Back to Inbox"]']);
+      if (backButton) {
         backButton.click();
       } else {
-        window.history.back(); // Fallback
+        window.history.back();
       }
-      await sleep(1500); // Wait for inbox to reload.
+      await sleepWithJitter(1800);
       processedCount++;
     }
 
     console.log(`📩 Processed ${processedCount} inbox emails.`);
     return { status: "success", processed: processedCount };
   } catch (e) {
-    console.error("Error in openAndClickUnreadMails:", e.message);
+    console.error("Error in processInboxMails:", e.message);
     return { status: "error", message: e.message };
   }
 }
 
-/**
- * Extracts the email address of the currently logged-in user.
- * @returns {{email: string}|null}
- */
 function getAccountEmail() {
-    // This selector targets the account info tooltip area in the top right.
     const accountButton = document.querySelector('a[href^="https://accounts.google.com/SignOutOptions"]');
     if (accountButton) {
         const email = accountButton.getAttribute('aria-label').match(/(\S+@\S+\.\S+)/);
@@ -187,10 +171,7 @@ function getAccountEmail() {
     return null;
 }
 
-
 // --- Message Listener ---
-
-// Listens for messages from the background script.
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
     case "moveSpamToInbox":
@@ -199,14 +180,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case "movePromotionsToInbox":
       moveAllToInbox("Promotions").then(sendResponse);
       break;
-    case "moveUpdatesToInbox":
-      moveAllToInbox("Updates").then(sendResponse);
-      break;
-    case "moveSocialToInbox":
-      moveAllToInbox("Social").then(sendResponse);
-      break;
     case "processInboxMails":
-      openAndClickUnreadMails().then(sendResponse);
+      processInboxMails(request.isAiReplyEnabled).then(sendResponse);
       break;
     case "countEmails":
       sendResponse({ count: countVisibleMails() });
@@ -218,8 +193,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ status: "error", message: "Unknown action" });
       break;
   }
-  // Return true to indicate we will send a response asynchronously.
   return true;
 });
 
-console.log("Gmail Warmup content script loaded.");
+console.log("Gmail Warmup content script (AI Edition) loaded and updated.");

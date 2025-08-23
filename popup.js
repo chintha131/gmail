@@ -1,21 +1,23 @@
 // popup.js - Logic for the extension's popup UI.
 
-// Helper to shorten document.querySelector
 const $ = sel => document.querySelector(sel);
 
 // Store references to all UI elements
 const ui = {
   startWarmupBtn: $("#startWarmupBtn"),
   startScanBtn: $("#startScanBtn"),
+  reloadBtn: $("#reloadBtn"),
+  clearDataBtn: $("#clearDataBtn"),
   statusChip: $("#statusChip"),
   statusText: $("#statusText"),
   step: $("#step"),
   cycles: $("#cycles"),
   accountCount: $("#accountCount"),
-  isScanning: $("#isScanning"),
+  repliesSent: $("#repliesSent"),
   globalLimit: $("#globalLimit"),
   saveGlobalLimit: $("#saveGlobalLimit"),
   accountsContainer: $("#accountsContainer"),
+  aiReplyToggle: $("#aiReplyToggle"),
 };
 
 /**
@@ -27,7 +29,6 @@ const ui = {
 function renderAccounts(scanResults = {}, perAccountLimits = {}, globalLimit = 10) {
   ui.accountsContainer.innerHTML = ""; // Clear previous results
   const accountKeys = Object.keys(scanResults);
-
   ui.accountCount.textContent = String(accountKeys.length);
 
   if (accountKeys.length === 0) {
@@ -39,7 +40,6 @@ function renderAccounts(scanResults = {}, perAccountLimits = {}, globalLimit = 1
     const accountIndex = key.replace("Account ", "");
     const info = scanResults[key] || {};
     const limit = perAccountLimits[accountIndex] ?? globalLimit;
-
     const accountDiv = document.createElement("div");
     accountDiv.className = "account";
     accountDiv.innerHTML = `
@@ -70,7 +70,9 @@ function syncUI(data) {
     step,
     mailLimit,
     scanResults,
-    perAccountLimits
+    perAccountLimits,
+    repliesSentCount,
+    isAiReplyEnabled
   } = data;
 
   // Update status chip
@@ -84,11 +86,15 @@ function syncUI(data) {
 
   // Update stats
   ui.step.textContent = step || "Idle";
-  ui.isScanning.textContent = isScanning ? "Yes" : "No";
   ui.globalLimit.value = mailLimit ?? 10;
-  // Note: cycle count would need to be passed from background script for real-time updates.
-  // This is a placeholder.
   ui.cycles.textContent = `0 / ${mailLimit ?? 10}`;
+  
+  if(ui.repliesSent) {
+    ui.repliesSent.textContent = repliesSentCount ?? 0;
+  }
+  if(ui.aiReplyToggle) {
+    ui.aiReplyToggle.checked = !!isAiReplyEnabled;
+  }
 
   // Render accounts section
   renderAccounts(scanResults, perAccountLimits, mailLimit);
@@ -111,6 +117,22 @@ function initialize() {
     const value = Number(ui.globalLimit.value) || 10;
     chrome.runtime.sendMessage({ action: "saveGlobalLimit", value });
   });
+
+  ui.reloadBtn.addEventListener("click", () => {
+    chrome.runtime.reload();
+  });
+
+  ui.clearDataBtn.addEventListener("click", () => {
+    chrome.storage.local.clear(() => {
+        chrome.runtime.reload();
+    });
+  });
+
+  if(ui.aiReplyToggle) {
+    ui.aiReplyToggle.addEventListener("change", (e) => {
+        chrome.runtime.sendMessage({ action: "saveAiReplySetting", isEnabled: e.target.checked });
+    });
+  }
 
   // --- Event Delegation for Per-Account Saves ---
   ui.accountsContainer.addEventListener("click", (e) => {
@@ -140,7 +162,7 @@ function initialize() {
 function loadStateAndSync() {
   const keys = [
     "isWarmingUp", "isScanning", "step", "mailLimit",
-    "scanResults", "perAccountLimits"
+    "scanResults", "perAccountLimits", "repliesSentCount", "isAiReplyEnabled"
   ];
   chrome.storage.local.get(keys, (data) => {
     if (chrome.runtime.lastError) {

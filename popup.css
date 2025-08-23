@@ -1,13 +1,20 @@
 /* popup.css - Styles for the extension popup */
 :root {
-    --bg-color: #f4f7f9;
+    --bg-color: #f0f4f8;
     --card-bg: #ffffff;
-    --text-color: #333;
-    --text-muted: #777;
-    --primary-color: #27ae60;
-    --secondary-color: #2980b9;
-    --border-color: #e1e8ed;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --text-color: #1e293b;
+    --text-muted: #64748b;
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --secondary-color: #059669;
+    --secondary-hover: #047857;
+    --tertiary-color: #d97706;
+    --tertiary-hover: #b45309;
+    --danger-color: #dc2626;
+    --danger-hover: #b91c1c;
+    --border-color: #e2e8f0;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --ai-accent: #7c3aed;
 }
 
 body {
@@ -40,24 +47,26 @@ body {
     border-radius: 16px;
     font-size: 12px;
     font-weight: 500;
-    background-color: var(--border-color);
-    color: var(--text-muted);
+    color: white;
+    background-color: var(--text-muted);
 }
 
 .status-chip.running {
-    background-color: #f39c12; /* Orange for running */
-    color: white;
+    background-color: var(--tertiary-color);
 }
 
 .status-chip.ready {
-    background-color: var(--primary-color); /* Green for ready */
-    color: white;
+    background-color: var(--primary-color);
 }
 
 .actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    margin-bottom: 10px;
+}
+
+.secondary-actions {
     margin-bottom: 16px;
 }
 
@@ -68,6 +77,7 @@ body {
     cursor: pointer;
     font-weight: 600;
     font-size: 14px;
+    color: white;
     transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
@@ -76,13 +86,31 @@ body {
 }
 
 .btn.primary {
-    background-color: var(--primary-color);
-    color: white;
+    background-image: linear-gradient(to right, #3b82f6, var(--primary-color));
+}
+.btn.primary:hover {
+    background-image: linear-gradient(to right, #1d4ed8, var(--primary-hover));
 }
 
 .btn.secondary {
-    background-color: var(--secondary-color);
-    color: white;
+    background-image: linear-gradient(to right, #10b981, var(--secondary-color));
+}
+.btn.secondary:hover {
+    background-image: linear-gradient(to right, #059669, var(--secondary-hover));
+}
+
+.btn.tertiary {
+    background-image: linear-gradient(to right, #f59e0b, var(--tertiary-color));
+}
+.btn.tertiary:hover {
+    background-image: linear-gradient(to right, #d97706, var(--tertiary-hover));
+}
+
+.btn.danger {
+    background-image: linear-gradient(to right, #ef4444, var(--danger-color));
+}
+.btn.danger:hover {
+    background-image: linear-gradient(to right, #dc2626, var(--danger-hover));
 }
 
 .btn.small {
@@ -93,6 +121,8 @@ body {
 .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+    background-image: none;
+    background-color: #95a959;
 }
 
 .stats-grid {
@@ -142,8 +172,14 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
 }
+.setting-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
 
 .setting-row label {
     font-size: 13px;
@@ -158,6 +194,59 @@ body {
     text-align: center;
     font-size: 14px;
 }
+
+/* --- ✨ AI Toggle Switch Styles --- */
+.toggle-row {
+    padding-top: 10px;
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: rgb(128, 166, 174);
+  transition: .4s;
+}
+input:checked + .slider {
+  background-color: var(--ai-accent);
+}
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--ai-accent);
+}
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+.slider.round {
+  border-radius: 34px;
+}
+.slider.round:before {
+  border-radius: 50%;
+}
+/* --- End Toggle Styles --- */
+
 
 #accountsContainer .placeholder {
     font-size: 13px;

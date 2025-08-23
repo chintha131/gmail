@@ -53,10 +53,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Sleeps for a base amount of time plus a random "jitter" to appear more human.
- * @param {number} baseMs The base milliseconds to wait.
- */
 function sleepWithJitter(baseMs) {
     const jitter = baseMs * 0.4; // Add up to 40% jitter
     const totalSleep = baseMs + Math.random() * jitter;
@@ -140,6 +136,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ status: "Warmup initiated" });
       break;
     
+    case "openAndCloseTab":
+      (async () => {
+        const newTab = await chrome.tabs.create({ url: request.url, active: false });
+        await sleepWithJitter(8000); // Wait for 8 seconds on the new page
+        await chrome.tabs.remove(newTab.id);
+        sendResponse({ status: "completed" });
+      })();
+      return true; // Keep the message channel open for async response
+
     case "getReply":
         generateReply(request.emailBody).then(reply => sendResponse({ reply }));
         break;
@@ -282,10 +287,15 @@ const navigationListener = async ({ tabId, url }) => {
     }
 };
 
-if (!chrome.webNavigation.onCompleted.hasListener(navigationListener)) {
-  chrome.webNavigation.onCompleted.addListener(navigationListener, {
-    url: [{ hostContains: "mail.google.com" }]
-  });
+if (chrome.webNavigation && chrome.webNavigation.onCompleted) {
+    if (!chrome.webNavigation.onCompleted.hasListener(navigationListener)) {
+      chrome.webNavigation.onCompleted.addListener(navigationListener, {
+        url: [{ hostContains: "mail.google.com" }]
+      });
+    }
+} else {
+    console.error("chrome.webNavigation API is not available. Check permissions in manifest.json.");
+    addLog("❌ Error: webNavigation API not available. Warmup process cannot start.");
 }
 
 
