@@ -1,184 +1,225 @@
-// content.js - Runs inside Gmail
+// content.js - This script runs inside the Gmail page to perform DOM manipulations.
+
+// --- Utility Functions ---
 
 /**
- * Utility: wait for an element to appear
+ * Waits for a specific element to appear in the DOM.
+ * @param {string} selector The CSS selector for the element.
+ * @param {number} timeout The maximum time to wait in milliseconds.
+ * @returns {Promise<Element>} A promise that resolves with the element.
  */
-function waitForElement(selector, timeout = 7000) {
-    return new Promise((resolve, reject) => {
-        const intervalTime = 200;
-        let waited = 0;
-        const interval = setInterval(() => {
-            const el = document.querySelector(selector);
-            if (el) {
-                clearInterval(interval);
-                resolve(el);
-            } else if ((waited += intervalTime) >= timeout) {
-                clearInterval(interval);
-                reject(new Error(`Timeout: ${selector}`));
-            }
-        }, intervalTime);
-    });
+function waitForElement(selector, timeout = 8000) {
+  return new Promise((resolve, reject) => {
+    const intervalTime = 200;
+    let totalWait = 0;
+    const interval = setInterval(() => {
+      const el = document.querySelector(selector);
+      if (el) {
+        clearInterval(interval);
+        resolve(el);
+      } else {
+        totalWait += intervalTime;
+        if (totalWait >= timeout) {
+          clearInterval(interval);
+          reject(new Error(`Timeout waiting for selector: "${selector}"`));
+        }
+      }
+    }, intervalTime);
+  });
 }
 
-// Small helpers
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function isVisible(el){ return !!el && el.offsetParent !== null; }
+/**
+ * A simple promise-based sleep function.
+ * @param {number} ms Milliseconds to wait.
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
- * Count visible mails in current view
+ * Checks if an element is currently visible to the user.
+ * @param {Element} el The element to check.
+ * @returns {boolean} True if the element is visible.
+ */
+function isVisible(el) {
+  return !!(el && el.offsetParent !== null);
+}
+
+// --- Core Action Functions ---
+
+/**
+ * Counts the number of visible email rows in the current view.
+ * @returns {number} The count of emails.
  */
 function countVisibleMails() {
-    const grid = document.querySelector('div[role="main"] table[role="grid"]');
-    if (!grid) return 0;
-    const rows = Array.from(grid.querySelectorAll('tr[role="row"]'));
-    return rows.filter(r => r.querySelector('td')).length;
+  // Gmail's main email list view is a table with role="grid".
+  const grid = document.querySelector('div[role="main"] table[role="grid"]');
+  if (!grid) return 0;
+  // Each email is a tr with role="row".
+  const rows = Array.from(grid.querySelectorAll('tr[role="row"]'));
+  // Filter out header rows or other non-email rows.
+  return rows.filter(r => r.querySelector('td')).length;
 }
 
 /**
- * Select all emails + move to Inbox
+ * Selects all emails in the current view and moves them to the Inbox.
+ * Handles "Not Spam" for the spam folder and "Move to Inbox" for others.
+ * @param {string} folderName The name of the folder being processed (for logging).
+ * @returns {Promise<object>} A status object.
  */
 async function moveAllToInbox(folderName = "Unknown") {
-    try {
-        // Ensure list is present
-        await waitForElement('div[role="main"]', 8000);
-        const mailCount = countVisibleMails();
-        if (mailCount === 0) {
-            console.log(`ℹ No mails found in ${folderName}`);
-            return { status: "empty", moved: 0 };
-        }
-
-        // Click the toolbar select checkbox
-        let selectTarget =
-            document.querySelector('div[aria-label="Select"] input[type="checkbox"]') ||
-            document.querySelector('div[data-tooltip="Select"] span[role="checkbox"]') ||
-            document.querySelector('div[aria-label^="Select"] span[role="checkbox"]') ||
-            document.querySelector('div[role="checkbox"]');
-
-        if (!selectTarget) {
-            const allChecks = Array.from(document.querySelectorAll('span[role="checkbox"], div[role="checkbox"]'));
-            selectTarget = allChecks.find(isVisible);
-        }
-        if (!selectTarget) return { status: "error", message: "Select-all checkbox not found" };
-
-        selectTarget.click();
-        await sleep(400);
-
-        // "Select all conversations" banner
-        const selectAllBannerLink = Array.from(document.querySelectorAll('span[role="link"], a'))
-            .find(n => /select all conversations/i.test(n.textContent || ""));
-        if (selectAllBannerLink) { selectAllBannerLink.click(); await sleep(300); }
-
-        const hash = (location.hash || "").toLowerCase();
-        const inSpam = hash.includes("#spam");
-
-        const tryClick = (sel) => {
-            const el = document.querySelector(sel);
-            if (isVisible(el)) { el.click(); return true; }
-            return false;
-        };
-
-        if (inSpam) {
-            if (tryClick('div[aria-label="Not spam"], div[data-tooltip="Not spam"]')) {
-                await sleep(1200);
-                console.log(`✅ Moved ${mailCount}+ spam mails → Inbox`);
-                return { status: "success", moved: mailCount, folder: "Spam" };
-            }
-        } else {
-            if (tryClick('div[aria-label="Move to inbox"], div[data-tooltip="Move to inbox"], div[aria-label="Move to Inbox"], div[data-tooltip="Move to Inbox"]')) {
-                await sleep(1200);
-                console.log(`✅ Moved ${mailCount}+ mails from ${folderName} → Inbox`);
-                return { status: "success", moved: mailCount, folder: folderName };
-            }
-            if (tryClick('div[aria-label="Move to Primary"], div[data-tooltip="Move to Primary"]')) {
-                await sleep(1200);
-                console.log(`✅ Moved ${mailCount}+ mails from ${folderName} → Inbox`);
-                return { status: "success", moved: mailCount, folder: folderName };
-            }
-        }
-
-        return { status: "error", message: "Move button not found" };
-    } catch (e) {
-        return { status: "error", message: e.message };
+  try {
+    await waitForElement('div[role="main"]');
+    const mailCount = countVisibleMails();
+    if (mailCount === 0) {
+      console.log(`ℹ️ No emails found in ${folderName}.`);
+      return { status: "empty", moved: 0 };
     }
+
+    // Find the master "Select All" checkbox in the toolbar.
+    const selectAllCheckbox = document.querySelector('div[data-tooltip="Select"] span[role="checkbox"]');
+    if (!selectAllCheckbox) throw new Error("Select-all checkbox not found.");
+    selectAllCheckbox.click();
+    await sleep(500);
+
+    // After selecting visible, Gmail might show a banner to "Select all conversations".
+    const selectAllBanner = Array.from(document.querySelectorAll('span[role="link"]'))
+      .find(el => el.textContent.includes("Select all"));
+    if (selectAllBanner) {
+      selectAllBanner.click();
+      await sleep(500);
+    }
+
+    // Find the correct "Move" button based on the current folder.
+    const inSpam = window.location.hash.includes("#spam");
+    const moveButtonSelector = inSpam ?
+      'div[data-tooltip="Not spam"]' :
+      'div[data-tooltip="Move to Inbox"]';
+
+    const moveButton = document.querySelector(moveButtonSelector);
+    if (!moveButton) throw new Error(`"Move" button not found for folder: ${folderName}`);
+
+    moveButton.click();
+    await sleep(1500); // Wait for action to complete and UI to update.
+
+    console.log(`✅ Moved emails from ${folderName} to Inbox.`);
+    return { status: "success", moved: mailCount, folder: folderName };
+
+  } catch (e) {
+    console.error(`Error in moveAllToInbox for ${folderName}:`, e.message);
+    return { status: "error", message: e.message };
+  }
 }
 
 /**
- * Open all unread mails one by one and click a safe link
+ * Iterates through unread emails in the inbox, opens them, and clicks a "safe" link.
+ * @returns {Promise<object>} A status object with the count of processed emails.
  */
-async function openAndClickAllMails() {
-    try {
-        let processed = 0;
-        let safetyCounter = 0;
-        while (true) {
-            try { await waitForElement('div[role="main"] table[role="grid"]', 7000); } catch {}
-            const nextUnread = document.querySelector('tr.zE');
-            if (!nextUnread) break;
+async function openAndClickUnreadMails() {
+  try {
+    let processedCount = 0;
+    const maxToProcess = 50; // Safety break to prevent infinite loops.
 
-            nextUnread.click();
-            await waitForElement('div.a3s, h2.hP', 8000);
-            await sleep(400);
+    for (let i = 0; i < maxToProcess; i++) {
+      await waitForElement('div[role="main"] table[role="grid"]', 5000).catch(() => {});
+      // Unread emails have a class 'zE'.
+      const nextUnread = document.querySelector('tr.zE');
+      if (!nextUnread) {
+        console.log("No more unread emails found.");
+        break; // Exit loop if no unread emails are left.
+      }
 
-            const emailBody = document.querySelector('div.a3s.aiL, div.a3s');
-            if (emailBody) {
-                const links = Array.from(emailBody.querySelectorAll('a[href]'));
-                const BAD = ["unsubscribe", "report", "spam", "abuse", "block", "privacy", "terms"];
-                const GOOD_HINTS = ["verify", "confirm", "click", "view", "open", "continue", "get started", "activate"];
-                const safe = links.find(a => {
-                    const t = (a.textContent || "").toLowerCase();
-                    const h = (a.getAttribute("href") || "").toLowerCase();
-                    if (BAD.some(b => t.includes(b) || h.includes(b))) return false;
-                    if (GOOD_HINTS.some(g => t.includes(g))) return true;
-                    return true;
-                });
-                if (safe) {
-                    safe.setAttribute("target", "_blank");
-                    safe.click();
-                    await sleep(500);
-                }
-            }
+      nextUnread.click();
+      await waitForElement('div.a3s', 8000); // Wait for email body to load.
+      await sleep(1000);
 
-            const backBtn =
-                document.querySelector('div[aria-label="Back to Inbox"]') ||
-                document.querySelector('div[aria-label="Back"]') ||
-                document.querySelector('div[aria-label^="Back to"]') ||
-                document.querySelector('div[command="Back"]');
-            if (backBtn && isVisible(backBtn)) {
-                backBtn.click();
-            } else {
-                window.history.back();
-            }
-            await sleep(1500);
+      // Find a "safe" link to click. Avoids unsubscribe, spam, etc.
+      const emailBody = document.querySelector('div.a3s');
+      if (emailBody) {
+        const links = Array.from(emailBody.querySelectorAll('a[href]'));
+        const badKeywords = ["unsubscribe", "report", "spam", "abuse", "block", "privacy", "terms"];
+        const safeLink = links.find(a => {
+          const text = (a.textContent || "").toLowerCase();
+          const href = (a.getAttribute("href") || "").toLowerCase();
+          return !badKeywords.some(kw => text.includes(kw) || href.includes(kw));
+        });
 
-            processed++;
-            if (++safetyCounter > 200) break;
+        if (safeLink) {
+          console.log("Found safe link, clicking:", safeLink.href);
+          safeLink.setAttribute("target", "_blank"); // Open in new tab to avoid navigation issues.
+          safeLink.click();
+          await sleep(500);
         }
-        console.log(`📩 Processed ${processed} inbox mails`);
-        return { status: "success", processed };
-    } catch (e) {
-        return { status: "error", message: e.message };
+      }
+
+      // Go back to the inbox view.
+      const backButton = document.querySelector('div[data-tooltip="Back to Inbox"]');
+      if (backButton && isVisible(backButton)) {
+        backButton.click();
+      } else {
+        window.history.back(); // Fallback
+      }
+      await sleep(1500); // Wait for inbox to reload.
+      processedCount++;
     }
+
+    console.log(`📩 Processed ${processedCount} inbox emails.`);
+    return { status: "success", processed: processedCount };
+  } catch (e) {
+    console.error("Error in openAndClickUnreadMails:", e.message);
+    return { status: "error", message: e.message };
+  }
 }
 
-// ===============================
-// MESSAGE LISTENER
-// ===============================
-chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
-    if (req.action === "moveSpamToInbox") {
-        moveAllToInbox("Spam").then(sendResponse); return true;
+/**
+ * Extracts the email address of the currently logged-in user.
+ * @returns {{email: string}|null}
+ */
+function getAccountEmail() {
+    // This selector targets the account info tooltip area in the top right.
+    const accountButton = document.querySelector('a[href^="https://accounts.google.com/SignOutOptions"]');
+    if (accountButton) {
+        const email = accountButton.getAttribute('aria-label').match(/(\S+@\S+\.\S+)/);
+        if (email && email[0]) {
+            return { email: email[0] };
+        }
     }
-    if (req.action === "movePromotionsToInbox") {
-        moveAllToInbox("Promotions").then(sendResponse); return true;
-    }
-    if (req.action === "moveUpdatesToInbox") {
-        moveAllToInbox("Updates").then(sendResponse); return true;
-    }
-    if (req.action === "moveSocialToInbox") {
-        moveAllToInbox("Social").then(sendResponse); return true;
-    }
-    if (req.action === "processInboxMails") {
-        openAndClickAllMails().then(sendResponse); return true;
-    }
-    return false;
+    return null;
+}
+
+
+// --- Message Listener ---
+
+// Listens for messages from the background script.
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  switch (request.action) {
+    case "moveSpamToInbox":
+      moveAllToInbox("Spam").then(sendResponse);
+      break;
+    case "movePromotionsToInbox":
+      moveAllToInbox("Promotions").then(sendResponse);
+      break;
+    case "moveUpdatesToInbox":
+      moveAllToInbox("Updates").then(sendResponse);
+      break;
+    case "moveSocialToInbox":
+      moveAllToInbox("Social").then(sendResponse);
+      break;
+    case "processInboxMails":
+      openAndClickUnreadMails().then(sendResponse);
+      break;
+    case "countEmails":
+      sendResponse({ count: countVisibleMails() });
+      break;
+    case "getAccountEmail":
+      sendResponse(getAccountEmail());
+      break;
+    default:
+      sendResponse({ status: "error", message: "Unknown action" });
+      break;
+  }
+  // Return true to indicate we will send a response asynchronously.
+  return true;
 });
 
-console.log("✅ Gmail content.js updated: Spam → Promotions → Updates → Social → Inbox → process mails.");
+console.log("Gmail Warmup content script loaded.");

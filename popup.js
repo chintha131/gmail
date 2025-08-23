@@ -1,128 +1,155 @@
-// popup.js
+// popup.js - Logic for the extension's popup UI.
 
+// Helper to shorten document.querySelector
 const $ = sel => document.querySelector(sel);
-const el = {
-  startWarmup: $("#startWarmupBtn"),
-  startScan: $("#startScanBtn"),
-  status: $("#status"),
-  running: $("#runningCount"),
-  reviewing: $("#reviewingCount"),
-  clicked: $("#clickedCount"),
-  sent: $("#sentCount"),
+
+// Store references to all UI elements
+const ui = {
+  startWarmupBtn: $("#startWarmupBtn"),
+  startScanBtn: $("#startScanBtn"),
+  statusChip: $("#statusChip"),
+  statusText: $("#statusText"),
+  step: $("#step"),
+  cycles: $("#cycles"),
   accountCount: $("#accountCount"),
   isScanning: $("#isScanning"),
-  step: $("#step"),
   globalLimit: $("#globalLimit"),
   saveGlobalLimit: $("#saveGlobalLimit"),
   accountsContainer: $("#accountsContainer"),
-  seedlist: $("#seedlist"),
 };
 
-function renderAccounts(scanResults = {}, perAccountLimits = {}) {
-  el.accountsContainer.innerHTML = "";
-  const keys = Object.keys(scanResults);
-  el.accountCount.textContent = String(keys.length);
+/**
+ * Renders the list of scanned accounts and their settings.
+ * @param {object} scanResults - Data from the account scan.
+ * @param {object} perAccountLimits - Custom limits for each account.
+ * @param {number} globalLimit - The default global limit.
+ */
+function renderAccounts(scanResults = {}, perAccountLimits = {}, globalLimit = 10) {
+  ui.accountsContainer.innerHTML = ""; // Clear previous results
+  const accountKeys = Object.keys(scanResults);
 
-  keys.forEach(key => {
-    const idx = key.replace("Account ", "");
+  ui.accountCount.textContent = String(accountKeys.length);
+
+  if (accountKeys.length === 0) {
+    ui.accountsContainer.innerHTML = `<p class="placeholder">No accounts found yet.</p>`;
+    return;
+  }
+
+  accountKeys.forEach(key => {
+    const accountIndex = key.replace("Account ", "");
     const info = scanResults[key] || {};
-    const limit = perAccountLimits[idx] ?? 10;
+    const limit = perAccountLimits[accountIndex] ?? globalLimit;
 
-    const wrap = document.createElement("div");
-    wrap.className = "account";
-    wrap.innerHTML = `
-      <h4>Account ${idx} <span class="muted">mail id: ${info.email || ""}</span></h4>
-      <div class="counts">
+    const accountDiv = document.createElement("div");
+    accountDiv.className = "account";
+    accountDiv.innerHTML = `
+      <div class="account-header">${key}<span class="email">${info.email || ""}</span></div>
+      <div class="account-stats">
         <div class="pill">📥 Inbox: ${info.inbox ?? 0}</div>
         <div class="pill">🚫 Spam: ${info.spam ?? 0}</div>
         <div class="pill">🏷️ Promotions: ${info.promotions ?? 0}</div>
-        <div class="pill">Limit: ${limit}</div>
       </div>
-      <div class="limit-row">
-        <label class="small">Daily Limit:</label>
-        <input type="number" min="1" step="1" value="${limit}" data-account-index="${idx}" />
-        <button class="save-per-account" data-account-index="${idx}">💾 Save Per-Account Limit</button>
+      <div class="setting-row">
+        <label>Daily Limit:</label>
+        <input type="number" min="1" step="1" value="${limit}" data-account-index="${accountIndex}" />
+        <button class="btn small save-per-account" data-account-index="${accountIndex}">Save</button>
       </div>
     `;
-    el.accountsContainer.appendChild(wrap);
-  });
-
-  // wire save per-account buttons
-  el.accountsContainer.querySelectorAll(".save-per-account").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = btn.getAttribute("data-account-index");
-      const input = el.accountsContainer.querySelector(`input[data-account-index="${idx}"]`);
-      const value = Number(input.value) || 10;
-      chrome.runtime.sendMessage({ action: "savePerAccountLimit", accountIndex: idx, value }, () => {});
-    });
+    ui.accountsContainer.appendChild(accountDiv);
   });
 }
 
-function renderSeedlist(seedlist = []) {
-  el.seedlist.innerHTML = "";
-  if (!seedlist.length) {
-    el.seedlist.innerHTML = `<div class="item muted">No items yet.</div>`;
-    return;
-  }
-  seedlist.slice(-100).reverse().forEach(it => {
-    const line = document.createElement("div");
-    line.className = "item";
-    line.textContent = `[${new Date(it.time).toLocaleTimeString()}] · A${it.accountIndex} · ${it.action.toUpperCase()} · ${it.senderEmail || ""} · ${it.subject || ""}`;
-    el.seedlist.appendChild(line);
-  });
-}
-
+/**
+ * Main function to update the entire UI based on the current state from storage.
+ * @param {object} data - The state object from chrome.storage.local.
+ */
 function syncUI(data) {
   const {
-    isWarmingUp, step, log,
-    runningCount, reviewingCount, clickedCount, sentCount,
-    isScanning, scanResults, mailLimit, seedlist, perAccountLimits
+    isWarmingUp,
+    isScanning,
+    step,
+    mailLimit,
+    scanResults,
+    perAccountLimits
   } = data;
 
-  el.status.textContent = isWarmingUp ? "⏳ Running..." : "✅ Ready.";
-  el.step.textContent = step || "Idle";
-  el.isScanning.textContent = isScanning ? "Yes" : "No";
+  // Update status chip
+  ui.statusText.textContent = isWarmingUp ? "Running..." : "Ready";
+  ui.statusChip.className = isWarmingUp ? "status-chip running" : "status-chip ready";
+  
+  // Update buttons state
+  ui.startWarmupBtn.disabled = isWarmingUp || isScanning;
+  ui.startScanBtn.disabled = isWarmingUp || isScanning;
+  ui.startScanBtn.textContent = isScanning ? "Scanning..." : "🔍 Scan Accounts";
 
-  el.running.textContent = runningCount ?? 0;
-  el.reviewing.textContent = reviewingCount ?? 0;
-  el.clicked.textContent = clickedCount ?? 0;
-  el.sent.textContent = sentCount ?? 0;
+  // Update stats
+  ui.step.textContent = step || "Idle";
+  ui.isScanning.textContent = isScanning ? "Yes" : "No";
+  ui.globalLimit.value = mailLimit ?? 10;
+  // Note: cycle count would need to be passed from background script for real-time updates.
+  // This is a placeholder.
+  ui.cycles.textContent = `0 / ${mailLimit ?? 10}`;
 
-  el.globalLimit.value = mailLimit ?? 10;
-
-  renderAccounts(scanResults || {}, perAccountLimits || {});
-  renderSeedlist(seedlist || []);
+  // Render accounts section
+  renderAccounts(scanResults, perAccountLimits, mailLimit);
 }
 
-function init() {
-  el.startWarmup.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ action: "startWarmup" }, () => {});
+/**
+ * Sets up all event listeners for the popup.
+ */
+function initialize() {
+  // --- Button Clicks ---
+  ui.startWarmupBtn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "startWarmup" });
   });
 
-  el.startScan.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ action: "startScan" }, () => {});
+  ui.startScanBtn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "startScan" });
   });
 
-  el.saveGlobalLimit.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ action: "saveGlobalLimit", value: Number(el.globalLimit.value) || 10 }, () => {});
+  ui.saveGlobalLimit.addEventListener("click", () => {
+    const value = Number(ui.globalLimit.value) || 10;
+    chrome.runtime.sendMessage({ action: "saveGlobalLimit", value });
   });
 
-  // initial load
-  chrome.storage.local.get([
-    "isWarmingUp","step","log",
-    "runningCount","reviewingCount","clickedCount","sentCount",
-    "isScanning","scanResults","mailLimit","seedlist","perAccountLimits"
-  ], syncUI);
+  // --- Event Delegation for Per-Account Saves ---
+  ui.accountsContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("save-per-account")) {
+      const accountIndex = e.target.dataset.accountIndex;
+      const input = ui.accountsContainer.querySelector(`input[data-account-index="${accountIndex}"]`);
+      const value = Number(input.value) || 10;
+      chrome.runtime.sendMessage({ action: "savePerAccountLimit", accountIndex, value });
+    }
+  });
 
-  // live updates
+  // --- Storage Listener for Live UI Updates ---
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    chrome.storage.local.get([
-      "isWarmingUp","step","log",
-      "runningCount","reviewingCount","clickedCount","sentCount",
-      "isScanning","scanResults","mailLimit","seedlist","perAccountLimits"
-    ], syncUI);
+    if (area === "local") {
+      // When storage changes, fetch the whole state and re-sync the UI
+      loadStateAndSync();
+    }
+  });
+
+  // Initial load
+  loadStateAndSync();
+}
+
+/**
+ * Fetches the current state from storage and calls syncUI.
+ */
+function loadStateAndSync() {
+  const keys = [
+    "isWarmingUp", "isScanning", "step", "mailLimit",
+    "scanResults", "perAccountLimits"
+  ];
+  chrome.storage.local.get(keys, (data) => {
+    if (chrome.runtime.lastError) {
+      console.error("Error loading state:", chrome.runtime.lastError);
+      return;
+    }
+    syncUI(data);
   });
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// Run the initialize function once the DOM is fully loaded.
+document.addEventListener("DOMContentLoaded", initialize);

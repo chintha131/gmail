@@ -1,64 +1,203 @@
+/* popup.css - Styles for the extension popup */
+:root {
+    --bg-color: #f4f7f9;
+    --card-bg: #ffffff;
+    --text-color: #333;
+    --text-muted: #777;
+    --primary-color: #27ae60;
+    --secondary-color: #2980b9;
+    --border-color: #e1e8ed;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
 body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  width: 360px;
-  margin: 0;
-  color: #2c3e50;
-  background: #eef2f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    width: 380px;
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 
-.container { padding: 16px; }
-
-.header { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
-.header h1 { margin: 0; font-size: 18px; }
-
-.primary, .secondary, .ghost {
-  border: none; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-weight: 600;
+.container {
+    padding: 16px;
 }
-.primary { background: #27ae60; color: #fff; }
-.primary:disabled { opacity: .6; cursor: not-allowed; }
-.secondary { background: #4285f4; color: #fff; }
-.ghost { background: #fff; color: #2c3e50; border: 1px solid #ccd6dd; }
-.small { padding: 8px 10px; }
 
-.status { font-size: 12px; color: #7f8c8d; }
-
-.info-boxes {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0 12px;
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
 }
-.box { padding: 12px; border-radius: 10px; color: #fff; text-align: center; }
-.box .title { font-size: 12px; opacity: .9; }
-.box .value { font-size: 18px; font-weight: 800; margin-top: 4px; }
-.total { background: #f39c12; }
-.active-accounts { background: #27ae60; }
-.inactive-accounts { background: #c0392b; }
 
-.results .placeholder { color: #7f8c8d; font-size: 13px; }
+.header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.status-chip {
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    background-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+.status-chip.running {
+    background-color: #f39c12; /* Orange for running */
+    color: white;
+}
+
+.status-chip.ready {
+    background-color: var(--primary-color); /* Green for ready */
+    color: white;
+}
+
+.actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.btn {
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn.secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.btn.small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.stat-card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.stat-card h3 {
+    margin: 0 0 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.stat-card .value {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+}
+
+.card h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.setting-row label {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.setting-row input[type="number"] {
+    width: 60px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 14px;
+}
+
+#accountsContainer .placeholder {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 10px 0;
+}
 
 .account {
-  background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
 }
-.account h3 { margin: 0 0 8px; font-size: 15px; display: flex; align-items:center; gap: 8px; }
-.limit-tag { font-size: 12px; color: #555; background: #f4f7f9; padding: 2px 6px; border-radius: 6px; }
-
-.folder {
-  border-top: 1px solid #edf2f7; padding-top: 8px; margin-top: 8px;
+.account:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
 }
-.folder-header {
-  display: flex; align-items: center; justify-content: space-between; cursor: pointer;
-  background: #f8fafc; padding: 8px; border-radius: 8px;
+
+.account-header {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
 }
-.folder-header span { font-weight: 700; }
-.folder-body { display: none; padding: 8px; }
-.folder-body.open { display: block; }
+.account-header .email {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-left: 6px;
+}
 
-.email-item { padding: 6px 0; border-bottom: 1px dashed #ecf0f1; }
-.email-item:last-child { border-bottom: none; }
-.email-subject { font-weight: 700; }
-.email-from { font-size: 12px; color: #7f8c8d; }
+.account-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
 
-.settings { margin-top: 12px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
-.settings h2 { margin: 0 0 10px; font-size: 15px; }
-.setting-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
-.setting-row input { padding: 8px; border-radius: 8px; border: 1px solid #ccd6dd; width: 100px; }
-#per-account-limits .setting-row { grid-template-columns: 1fr auto auto; }
-footer { margin-top: 10px; text-align: center; font-size: 11px; color: #7f8c8d; }
+.pill {
+    background-color: var(--bg-color);
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+}

@@ -1,103 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Gmail Warmup v21</title>
-  <link rel="stylesheet" href="popup.css" />
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; width: 360px; margin:0; background:#f5f7fb; color:#222; }
-    .container { padding: 14px; }
-    h1 { margin:0 0 10px; font-size: 18px; display:flex; align-items:center; gap:8px;}
-    .row { display:flex; gap:8px; margin-bottom:10px; }
-    button { padding:8px 10px; border:none; border-radius:8px; background:#2b78e4; color:#fff; font-weight:600; cursor:pointer; }
-    button.secondary { background:#6c757d; }
-    button:disabled { opacity:.6; cursor:not-allowed; }
-    .statgrid { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin:8px 0 12px; }
-    .card { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:10px; }
-    .card h3 { margin:0 0 4px; font-size:12px; color:#666; }
-    .card .val { font-size:16px; font-weight:700; }
-
-    .account { margin-bottom:10px; }
-    .account h4 { margin:0 0 6px; font-size:13px; }
-    .counts { display:flex; gap:6px; flex-wrap:wrap; }
-    .pill { background:#fff; border-radius:999px; padding:6px 8px; font-size:12px; box-shadow:0 1px 2px rgba(0,0,0,.06); }
-    .muted { color:#777; }
-
-    .seedlist { max-height: 160px; overflow:auto; margin-top:8px; }
-    .seedlist .item { font-size:12px; padding:6px; border-bottom:1px solid #eee; }
-    .controls { display:flex; gap:8px; align-items:center; margin-top:8px; }
-    input[type=number] { width:70px; padding:6px; border:1px solid #ccc; border-radius:6px; }
-    .limit-row { display:flex; gap:6px; align-items:center; margin-top:6px; }
-    .small { font-size:12px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Gmail Warmup V22</title>
+    <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
-    <h1>📧 Gmail Warmup v21</h1>
+    <div class="container">
+        <header class="header">
+            <h1>📧 Gmail Warmup V22</h1>
+            <div class="status-chip" id="statusChip">
+                <span id="statusText">Ready</span>
+            </div>
+        </header>
 
-    <div class="row">
-      <button id="startWarmupBtn">Start Warmup</button>
-      <button id="startScanBtn" class="secondary">Start Scan</button>
+        <div class="actions">
+            <button id="startWarmupBtn" class="btn primary">▶ Start Warmup</button>
+            <button id="startScanBtn" class="btn secondary">🔍 Scan Accounts</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Step</h3>
+                <div id="step" class="value">Idle</div>
+            </div>
+            <div class="stat-card">
+                <h3>Cycles</h3>
+                <div id="cycles" class="value">0 / 10</div>
+            </div>
+            <div class="stat-card">
+                <h3>Accounts</h3>
+                <div id="accountCount" class="value">0</div>
+            </div>
+             <div class="stat-card">
+                <h3>Scanning</h3>
+                <div id="isScanning" class="value">No</div>
+            </div>
+        </div>
+
+        <div class="settings card">
+            <h3>⚙️ Global Settings</h3>
+            <div class="setting-row">
+                <label for="globalLimit">Daily Mail Limit:</label>
+                <input id="globalLimit" type="number" min="1" step="1" value="10" />
+                <button id="saveGlobalLimit" class="btn small">Save</button>
+            </div>
+        </div>
+
+        <div id="accounts" class="card">
+            <h3>Accounts Found</h3>
+            <div id="accountsContainer">
+                <p class="placeholder">Click "Scan Accounts" to begin.</p>
+            </div>
+        </div>
+
     </div>
-
-    <div class="statgrid">
-      <div class="card">
-        <h3>Status</h3>
-        <div id="status" class="val">✅ Ready.</div>
-      </div>
-      <div class="card">
-        <h3>Running</h3>
-        <div id="runningCount" class="val">0</div>
-      </div>
-      <div class="card">
-        <h3>Reviewing</h3>
-        <div id="reviewingCount" class="val">0</div>
-      </div>
-      <div class="card">
-        <h3>Clicked</h3>
-        <div id="clickedCount" class="val">0</div>
-      </div>
-    </div>
-
-    <div class="statgrid">
-      <div class="card">
-        <h3>Sent</h3>
-        <div id="sentCount" class="val">0</div>
-      </div>
-      <div class="card">
-        <h3>Accounts</h3>
-        <div id="accountCount" class="val">0</div>
-      </div>
-      <div class="card">
-        <h3>Scanning</h3>
-        <div id="isScanning" class="val">No</div>
-      </div>
-      <div class="card">
-        <h3>Step</h3>
-        <div id="step" class="val">Idle</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>⚙ Settings</h3>
-      <div class="controls">
-        <label class="small">Global Daily Mail Limit:</label>
-        <input id="globalLimit" type="number" min="1" step="1" />
-        <button id="saveGlobalLimit">💾 Save</button>
-      </div>
-    </div>
-
-    <div id="accounts" class="card" style="margin-top:8px;">
-      <h3>Accounts</h3>
-      <div id="accountsContainer"></div>
-    </div>
-
-    <div class="card" style="margin-top:8px;">
-      <h3>Seedlist (auto grows)</h3>
-      <div id="seedlist" class="seedlist"></div>
-    </div>
-  </div>
-
-  <script src="popup.js"></script>
+    <script src="popup.js"></script>
 </body>
 </html>

@@ -1,45 +1,44 @@
 {
   "manifest_version": 3,
-  "name": "Gmail Warmup",
-  "version": "1.0",
-  "description": "Gmail Automation processes involve opening unread emails in the inbox, marking them as important, and moving each email in the spam folder to the inbox. Additionally, the automation processes emails in the Promotions and Social tabs, moving them to the inbox as well",
+  "name": "Gmail Warmup ✨ AI Edition",
+  "version": "2.3",
+  "description": "Automates Gmail processes to improve sender reputation, now with AI-powered smart replies powered by the Gemini API.",
   "permissions": [
-    "tabs",
-    "activeTab",
     "storage",
-    "scripting",
-    "webRequest",
-    "notifications",
-    "alarms",
-    "webNavigation"
+    "tabs",
+    "webNavigation",
+    "notifications"
   ],
   "host_permissions": [
-    "https://sendcrux.com/*",
-    "https://scapi.sendcrux.com/*",
-    "http://127.0.0.1:8000/*",
-    "http://localhost:8000/*",
     "https://mail.google.com/*",
-    "https://hooks.slack.com/*"
+    "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://mail.google.com/*",
-        "https://accounts.google.com/*"
-      ],
+      "matches": ["https://mail.google.com/*"],
       "js": ["content.js"]
     }
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
   },
   "web_accessible_resources": [
     {
-      "resources": ["images/*"],
-      "matches": ["https://mail.google.com/*"]
+      "resources": ["images/*.png"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
