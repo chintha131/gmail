@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Warmup",
+  "version": "1.0",
+  "description": "Gmail Automation processes involve opening unread emails in the inbox, marking them as important, and moving each email in the spam folder to the inbox. Additionally, the automation processes emails in the Promotions and Social tabs, moving them to the inbox as well",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "scripting",
+    "webRequest",
+    "notifications",
+    "alarms",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://sendcrux.com/*",
+    "https://scapi.sendcrux.com/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "https://mail.google.com/*",
+    "https://hooks.slack.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*",
+        "https://accounts.google.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["images/*"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ]
+}

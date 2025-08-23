@@ -1,0 +1,246 @@
+// ===============================
+// Extract account details + store
+// ===============================
+function handleAccountDetails() {
+  const observer = new MutationObserver((mutationsList) => {
+    for (const mutation of mutationsList) {
+      if (mutation.type === "childList") {
+        const accountDetails = document.querySelector(".gb_zc");
+        const firstNameElement = document.querySelector(".gb_g");
+
+        if (accountDetails && firstNameElement) {
+          // Extract email from gb_zc (last div)
+          const emailElement = accountDetails.querySelectorAll("div")[2];
+          const email = emailElement
+            ? emailElement.textContent.trim()
+            : "Email not found";
+
+          // Extract first + last name
+          const firstNameFull = firstNameElement.textContent.trim();
+          const nameParts = firstNameFull.split(" ");
+          const firstName = nameParts[0];
+          const lastName = nameParts.slice(1).join(" ") || "";
+
+          console.log("Extracted Name:", firstNameFull);
+          console.log("Extracted Email:", email);
+
+          // Save into chrome.storage if not already stored
+          chrome.storage.local.get({ emails: [] }, (data) => {
+            const emailExists = data.emails.some((entry) => entry.email === email);
+
+            if (!emailExists) {
+              // increment inactive count
+              chrome.storage.local.get({ inactiveCount: 0 }, (countData) => {
+                const newInactiveCount = countData.inactiveCount + 1;
+                chrome.storage.local.set({ inactiveCount: newInactiveCount }, () => {
+                  console.log("Inactive account count incremented.");
+                  const inactiveEl = document.getElementById("inactiveCount");
+                  if (inactiveEl) inactiveEl.textContent = newInactiveCount;
+                });
+              });
+
+              const updatedEmails = [
+                ...data.emails,
+                { first_name: firstName, last_name: lastName, email: email },
+              ];
+              chrome.storage.local.set({ emails: updatedEmails }, () => {
+                console.log("Email + names stored.");
+              });
+            } else {
+              console.log("Email already exists.");
+            }
+          });
+
+          // Track URL visit counts
+          const currentUrl = window.location.href;
+          chrome.storage.local.get({ urlVisitCounts: {} }, (data) => {
+            const urlVisitCounts = data.urlVisitCounts;
+            urlVisitCounts[currentUrl] = (urlVisitCounts[currentUrl] || 0) + 1;
+
+            chrome.storage.local.set({ urlVisitCounts }, () => {
+              const visitCount = urlVisitCounts[currentUrl];
+              console.log(`Visited URL: ${currentUrl}, Count: ${visitCount}`);
+
+              if (visitCount > 1) {
+                console.log(`Processing unread emails on repeat visit...`);
+                processUnreadEmails();
+              } else {
+                setTimeout(() => {
+                  navigateToNextAccount(currentUrl);
+                }, 8000); // wait before next account
+              }
+            });
+          });
+
+          observer.disconnect();
+          return;
+        }
+      }
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// ===============================
+// Navigate between Gmail accounts
+// ===============================
+function navigateToNextAccount(currentUrl) {
+  const urlMatch = currentUrl.match(/\/mail\/u\/(\d+)\//);
+
+  if (urlMatch) {
+    const currentIndex = parseInt(urlMatch[1], 10);
+    const nextIndex = currentIndex + 1;
+
+    const newUrl = `https://mail.google.com/mail/u/${nextIndex}/#inbox`;
+    console.log(`Switching to account: ${nextIndex}`);
+    console.log(`New URL: ${newUrl}`);
+
+    window.location.replace(newUrl);
+  } else {
+    console.log("Failed to parse account index from URL.");
+  }
+}
+
+// ===============================
+// Dummy: process unread emails
+// (replace with real Gmail logic)
+// ===============================
+function processUnreadEmails() {
+  console.log("📩 Processing unread emails...");
+
+  const unread = document.querySelectorAll("tr.zE");
+  console.log(`Found ${unread.length} unread mails.`);
+
+  unread.forEach((mail, i) => {
+    console.log(`Opening mail #${i + 1}`);
+    // 👉 here you can add logic to open mail + click links
+  });
+}
+
+// ===============================
+// Popup logic
+// ===============================
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.querySelector(".container");
+  const systemNameInput = document.getElementById("systemName");
+  const profileNameInput = document.getElementById("profileName");
+
+  const storedEmailsContainer = document.createElement("div");
+  storedEmailsContainer.classList.add("stored-emails-container");
+  container.insertBefore(storedEmailsContainer, document.getElementById("saveButton"));
+
+  // Update counts
+  const updateCounts = () => {
+    const inputGroups = storedEmailsContainer.querySelectorAll(".input-group");
+    const totalCount = inputGroups.length;
+    let activeAccountsCount = 0;
+
+    chrome.storage.local.get({ inactiveCount: 0 }, (data) => {
+      let inactiveAccountsCount = data.inactiveCount;
+
+      inputGroups.forEach((group) => {
+        const emailInput = group.querySelector("input[type='text']:nth-of-type(2)");
+        if (emailInput.value.trim() !== "") activeAccountsCount++;
+        else inactiveAccountsCount++;
+      });
+
+      document.getElementById("activeCount").textContent = activeAccountsCount;
+      document.getElementById("inactiveCount").textContent = inactiveAccountsCount;
+      document.getElementById("totalCount").textContent = totalCount;
+    });
+  };
+
+  // Load stored emails
+  chrome.storage.local.get({ emails: [], systemName: "", profileName: "" }, (data) => {
+    data.emails.forEach((entry) => {
+      const inputGroup = document.createElement("div");
+      inputGroup.classList.add("input-group");
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = `${entry.first_name} ${entry.last_name}`;
+      nameInput.readOnly = true;
+      nameInput.style.width = "200px";
+
+      const emailInput = document.createElement("input");
+      emailInput.type = "text";
+      emailInput.value = entry.email;
+      emailInput.readOnly = true;
+      emailInput.style.width = "200px";
+
+      const countInput = document.createElement("input");
+      countInput.type = "number";
+      countInput.style.width = "100px";
+      countInput.placeholder = "Emails/day";
+      if (entry.receive_limit) countInput.value = entry.receive_limit;
+
+      inputGroup.appendChild(nameInput);
+      inputGroup.appendChild(emailInput);
+      inputGroup.appendChild(countInput);
+      storedEmailsContainer.appendChild(inputGroup);
+    });
+
+    updateCounts();
+    systemNameInput.value = data.systemName;
+    profileNameInput.value = data.profileName;
+  });
+
+  // Save button
+  document.getElementById("saveButton").addEventListener("click", () => {
+    const systemName = systemNameInput.value.trim();
+    const profileName = profileNameInput.value.trim();
+
+    const subscribers = [];
+    const inputGroups = storedEmailsContainer.querySelectorAll(".input-group");
+
+    inputGroups.forEach((group) => {
+      const [nameInput, emailInput] = group.querySelectorAll("input[type='text']");
+      const countInput = group.querySelector("input[type='number']");
+
+      const nameParts = nameInput.value.trim().split(" ");
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ");
+      const emailValue = emailInput.value.trim();
+      const countValue = parseInt(countInput.value.trim(), 10);
+
+      if (emailValue && !isNaN(countValue)) {
+        subscribers.push({
+          first_name: firstName,
+          last_name: lastName,
+          email: emailValue,
+          receive_limit: countValue,
+        });
+      }
+    });
+
+    const payload = { system_name: systemName, profile_name: profileName, emails: subscribers };
+
+    chrome.storage.local.set({ systemName, profileName, emails: subscribers }, () => {
+      console.log("✅ Saved system + profile + subscribers.");
+    });
+
+    chrome.runtime.sendMessage({ action: "saveData", payload }, (res) => {
+      if (res?.success) alert("Data saved successfully!");
+      else alert("Failed to save data.");
+    });
+  });
+
+  // Go button
+  document.getElementById("goButton").addEventListener("click", () => {
+    const goButton = document.getElementById("goButton");
+    goButton.innerHTML = '<i class="fas fa-pause"></i> Pause';
+    goButton.style.backgroundColor = "#dc3545";
+
+    chrome.runtime.sendMessage({ action: "goToGoogle" });
+  });
+
+  // Clear button
+  document.getElementById("clearButton").addEventListener("click", () => {
+    chrome.storage.local.clear(() => {
+      console.log("Storage cleared.");
+      storedEmailsContainer.innerHTML = "";
+      updateCounts();
+    });
+  });
+});

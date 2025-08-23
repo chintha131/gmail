@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gmail Automation Dashboard</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📧 Gmail Warmup v21</h1>
+      <button id="startScanBtn">▶ Start Scan</button>
+    </header>
+
+    <main>
+      <section id="results-container" aria-live="polite">
+        <p class="placeholder">
+          Click <strong>Start Scan</strong> to find email senders from all your logged-in accounts.
+        </p>
+      </section>
+
+      <!-- Loader -->
+      <div id="loader" class="hidden">
+        <div class="spinner"></div>
+        <p>Scanning emails... Please wait.</p>
+      </div>
+
+      <!-- ⚙ Settings Section -->
+      <section class="settings">
+        <h2>⚙ Settings</h2>
+        <label for="mailLimit">Daily Mail Limit:</label>
+        <input type="number" id="mailLimit" min="1" max="200" value="10" />
+        <button id="saveSettings">💾 Save</button>
+      </section>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

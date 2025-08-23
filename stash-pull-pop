@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Navigate to the project directory
+# cd /path/to/BrowserApp_SC
+
+echo "------------------------------"
+echo "🔄 Stashing local changes, if any..."
+git stash
+
+echo "🔄 Pulling latest changes from GitHub..."
+git pull
+
+echo "🔄 Re-applying stashed changes..."
+# '|| true' prevents exit if there's nothing to pop or if conflict happens
+git stash pop || true
+
+echo "✅ Triggering extension reload..."
+
+# Option 1: Manual reminder
+echo "👉 Please reload the extension in chrome://extensions (Developer Mode → Reload)."
+
+# Option 2: If you want automation (Linux/Mac), use pkill:
+# pkill -f "Google Chrome"
+# google-chrome --load-extension=/path/to/BrowserApp_SC &
+
+echo "✅ Extension updated at $(date)"
