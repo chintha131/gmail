@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Gmail Warmup 📧 AI Edition",
-  "version": "2.3",
-  "description": "Automates Gmail processes to improve sender reputation, now with AI-powered smart replies powered by the Gemini API.",
+  "version": "2.4",
+  "description": "Automates Gmail processes to improve sender reputation, with AI-powered smart replies using the Gemini API.",
   "permissions": [
     "storage",
+    "identity",
+    "scripting",
     "tabs",
-    "webNavigation",
-    "notifications"
+    "activeTab"
   ],
   "host_permissions": [
     "https://mail.google.com/*",

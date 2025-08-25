@@ -1,188 +1,159 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>📧 Gmail Warmup ✨ AI Edition</title>
-    <link rel="stylesheet" href="popup.css">
-    <style>
-        .account-card {
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin: 8px 0;
-            border-radius: 8px;
-            background: #fafafa;
-        }
-        .account-card h4 { margin: 0 0 6px; }
-        .account-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
-        .account-row input { flex: 1; padding: 4px; }
-        .account-row button { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; }
-        .delete-btn { background: #ff4c4c; color: #fff; }
-        .save-btn { background: #28a745; color: #fff; margin-top: 8px; }
-        .chat-box {
-            margin-top: 20px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 8px;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            height: 200px;
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 4px;
-            font-size: 13px;
-        }
-        .chat-input-row {
-            display: flex;
-            gap: 6px;
-            margin-top: 6px;
-        }
-        .chat-input-row input {
-            flex: 1;
-            padding: 6px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-        }
-        .chat-input-row button {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background: #007bff;
-            color: #fff;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>📧 Gmail Run ✨ AI Edition</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+      width: 380px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0;
+    }
+    .stat-box {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .stat-card {
+      flex: 1;
+      border: 2px solid #ccc;
+      padding: 6px;
+      border-radius: 6px;
+      text-align: center;
+      background: #fafafa;
+    }
+    input, button {
+      padding: 6px;
+      margin: 4px 0;
+      border-radius: 4px;
+      border: 2px solid #ccc;
+      width: 100%;
+    }
+    button {
+      cursor: pointer;
+    }
+    #goButton {
+      background: #28a745;
+      color: #fff;
+      font-weight: bold;
+    }
+    #unsubscribeButton {
+      background: #ff4c4c;
+      color: #fff;
+      font-weight: bold;
+    }
+    .chat-box {
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 150px;
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+      font-size: 13px;
+      border-bottom: 2px solid #eee;
+    }
+    .chat-messages p {
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+    .chat-input-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .chat-input-row input {
+      flex: 1;
+      padding: 6px;
+      border: 2px solid #ccc;
+      border-radius: 6px;
+    }
+    .chat-input-row button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    .chat-input-row button:hover {
+      background: #0056b3;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1>📧 Gmail Warmup ✨ AI</h1>
-            <div class="status-chip" id="statusChip">
-                <span id="statusText">Ready</span>
-            </div>
-        </header>
+  <div class="container">
+    <header>
+      <h1>📧 Gmail Run ✨ AI</h1>
+      <span id="statusText">System: Ready ✅</span>
+    </header>
 
-        <div class="actions">
-            <button id="startWarmupBtn" class="btn primary">▶ Start Warmup</button>
-            <button id="startScanBtn" class="btn secondary">🔍 Scan Accounts</button>
-        </div>
-        
-        <div class="actions secondary-actions">
-            <button id="reloadBtn" class="btn tertiary">🔄 Reload Extension</button>
-            <button id="clearDataBtn" class="btn danger">🗑️ Clear Data</button>
-        </div>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Step</h3>
-                <div id="step" class="value">Idle</div>
-            </div>
-            <div class="stat-card">
-                <h3>Cycles</h3>
-                <div id="cycles" class="value">0 / 10</div>
-            </div>
-            <div class="stat-card">
-                <h3>Accounts</h3>
-                <div id="accountCount" class="value">0</div>
-            </div>
-             <div class="stat-card">
-                <h3>✨ Replies</h3>
-                <div id="repliesSent" class="value">0</div>
-            </div>
-        </div>
-
-        <div class="settings card">
-            <h3>⚙️ Global Settings</h3>
-            <div class="setting-row">
-                <label for="globalLimit">Daily Mail Limit:</label>
-                <input id="globalLimit" type="number" min="1" step="1" value="10" />
-                <button id="saveGlobalLimit" class="btn small">Save</button>
-            </div>
-            <div class="setting-row toggle-row">
-                <label for="aiReplyToggle">✨ AI Smart Replies</label>
-                <label class="switch">
-                    <input type="checkbox" id="aiReplyToggle">
-                    <span class="slider round"></span>
-                </label>
-            </div>
-        </div>
-
-        <div id="accounts" class="card">
-            <h3>Accounts Found</h3>
-            <div id="accountsContainer">
-                <p class="placeholder">Click "Scan Accounts" to detect your Gmail login.</p>
-            </div>
-        </div>
-
-        <!-- Chat box -->
-        <div class="chat-box">
-            <div class="chat-messages" id="chatMessages">
-                <p><b>System:</b> Chat ready ✅</p>
-            </div>
-            <div class="chat-input-row">
-                <input type="text" id="chatInput" placeholder="Type a message..." />
-                <button id="chatSendBtn">Send</button>
-            </div>
-        </div>
+    <!-- Stats -->
+    <div class="stat-box">
+      <div class="stat-card">
+        <h3>Active</h3>
+        <div id="activeCount">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Inactive</h3>
+        <div id="inactiveCount">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Total</h3>
+        <div id="totalCount">0</div>
+      </div>
     </div>
 
-    <script>
-        // Chat
-        const chatMessages = document.getElementById("chatMessages");
-        const chatInput = document.getElementById("chatInput");
-        const chatSendBtn = document.getElementById("chatSendBtn");
+    <!-- System/Profile -->
+    <input id="systemName" type="text" placeholder="System Name">
+    <input id="profileName" type="text" placeholder="Profile Name">
+    <input id="breakInput" type="number" placeholder="Break Time (min)">
+    <input id="location" type="text" placeholder="Location">
 
-        function appendMessage(sender, text) {
-            const msg = document.createElement("p");
-            msg.innerHTML = `<b>${sender}:</b> ${text}`;
-            chatMessages.appendChild(msg);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+    <!-- Save -->
+    <button id="saveButton">💾 Save Settings</button>
 
-        chatSendBtn.addEventListener("click", () => {
-            const text = chatInput.value.trim();
-            if (!text) return;
-            appendMessage("You", text);
-            chatInput.value = "";
-            setTimeout(() => appendMessage("AI", "Got it ✅"), 500);
-        });
+    <!-- GO Button -->
+    <button id="goButton">▶ Start Warmup</button>
 
-        // Detect logged-in Gmail account
-        document.getElementById("startScanBtn").addEventListener("click", () => {
-            chrome.identity.getProfileUserInfo((info) => {
-                const email = info.email || "No Gmail account detected";
-                const container = document.getElementById("accountsContainer");
-                container.innerHTML = `
-                    <div class="account-card">
-                        <h4>Detected Account</h4>
-                        <div class="account-row">
-                            <input type="text" value="${email}" readonly>
-                        </div>
-                        <div class="account-row">
-                            <input type="number" placeholder="Emails receive per day">
-                            <button class="delete-btn">Delete</button>
-                        </div>
-                        <button class="save-btn">Save</button>
-                    </div>`;
-                appendMessage("System", `Detected Gmail account: ${email}`);
-            });
-        });
+    <!-- Unsubscribe Section -->
+    <div>
+      <h3>Unsubscribe Emails</h3>
+      <div id="emailsToUnsubscribeList"></div>
+      <button id="unsubscribeButton">🚫 Unsubscribe</button>
+    </div>
 
-        // Save/Delete logic
-        document.addEventListener("click", (e) => {
-            if (e.target.classList.contains("save-btn")) {
-                const card = e.target.closest(".account-card");
-                const email = card.querySelector("input[type=text]").value;
-                const limit = card.querySelector("input[type=number]").value;
-                appendMessage("System", `Saved: ${email}, Limit: ${limit}`);
-            }
-            if (e.target.classList.contains("delete-btn")) {
-                e.target.closest(".account-card").remove();
-                appendMessage("System", "Account deleted ❌");
-            }
-        });
-    </script>
+    <!-- History -->
+    <div id="unsubscribedEmails" style="display:none;"></div>
+
+    <!-- Chat -->
+    <h3>🤖 AI Chat</h3>
+    <div class="chat-box">
+      <div class="chat-messages" id="chatMessages">
+        <p><b>System:</b> Chat ready ✅</p>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="Type a message...">
+        <button id="chatSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>
